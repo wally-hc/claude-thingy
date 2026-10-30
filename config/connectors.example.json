@@ -1,0 +1,17 @@
+{
+  "slack": {
+    "type": "http",
+    "url": "https://mcp.slack.com/mcp",
+    "description": "Slack: search and read channels, threads and DMs, post messages"
+  },
+  "airtable": {
+    "type": "http",
+    "url": "https://mcp.airtable.com/mcp",
+    "description": "Airtable: list bases and tables, read, search and update records"
+  },
+  "github": {
+    "type": "http",
+    "url": "https://api.githubcopilot.com/mcp/",
+    "description": "GitHub: issues, pull requests, repositories, code search"
+  }
+}
