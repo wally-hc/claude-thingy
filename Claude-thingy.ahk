@@ -23,7 +23,7 @@ OnMessage(0x404, TrayEvent)
 
 configOk := LoadConfig()
 HotkeyLabel := RegisterHotkey()
-A_IconTip := "Claude-thingy (" HotkeyLabel ")"
+A_IconTip := "Claude-thingy " AppVersion " (" HotkeyLabel ")"
 if configOk
     Notify("Ready. Press " HotkeyLabel " to record a note.")
 if Conf("dry_run", 0)

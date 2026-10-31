@@ -1,0 +1,59 @@
+name: Bug report
+description: Something didn't work as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for trying Claude-thingy and taking the time to report this.
+        Please remove tokens, passwords and anything private from what you paste.
+  - type: input
+    id: version
+    attributes:
+      label: Claude-thingy version
+      description: Hover over the tray icon to see it, e.g. "Claude-thingy 0.1.0".
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where did it go wrong?
+      options:
+        - Setup or installing dependencies
+        - Recording or transcription
+        - Routing (the job spec was wrong)
+        - The popup
+        - A running job (question, plan, code, connector)
+        - Notifications (toast, Slack, email)
+        - Answering a waiting job
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+      placeholder: |
+        I said "Question: ..." and expected ..., but ...
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ...
+        2. ...
+  - type: textarea
+    id: spec
+    attributes:
+      label: Job spec or error message
+      description: If it's about a job, paste its line from data/logs/notes-<month>.jsonl, or the error from the notification.
+      render: json
+  - type: input
+    id: environment
+    attributes:
+      label: Windows and Claude Code versions
+      description: For example "Windows 11 24H2, Claude Code 2.1.312" (run `claude --version`).

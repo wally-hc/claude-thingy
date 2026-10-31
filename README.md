@@ -2,6 +2,8 @@
 
 A Windows tool that turns a voice note into a background Claude Code job. Every job behaves like one ongoing assistant that remembers earlier work.
 
+> **Status: alpha (0.x).** It works day to day, but config formats and folders can still change between versions. Read the [changelog](CHANGELOG.md) before updating. [Feedback](#feedback) is very welcome.
+
 1. Press **Ctrl+Alt+Shift+J** (or the `hotkey` you set) to start recording, and press it again to stop. A beep marks the start and the stop. Recording stops on its own at `max_record_seconds`. The audio is transcribed on your machine with whisper.cpp, and the WAV file is deleted.
 2. A **dispatcher** turns the note into a job spec: what kind of job it is, where it runs, which connectors and model it uses, how you get notified, and which topic it belongs to. Free keyword rules run first. A single cheap Haiku call fills in anything they don't set, and it's skipped entirely when the rules already decide the kind, workspace and topic (plus the connectors, for connector jobs). The spec records which one routed it in `routed_by` (`rules` or `haiku`).
 3. A popup shows the transcript and the spec as editable fields. Fix anything that's wrong, then click **Send**.
@@ -221,6 +223,17 @@ Every job is tracked; nothing is excluded. User plugins stay on, so the WakaTime
 - **A resume failed**: if the old session no longer exists, the job restarts automatically using the memory file.
 - **Mic or transcription problems**: see v1. List devices with `ffmpeg -hide_banner -list_devices true -f dshow -i dummy` and set `mic` in `config.json`.
 - **Check the scripts for errors**: `AutoHotkey64.exe /ErrorStdOut /validate Claude-thingy.ahk`
+
+## Updating
+
+Download the latest release from [Releases](../../releases), or run `git pull`. Your own files (`config/*.json`, `config/instructions.md`, `data/` and `tools/`) aren't part of the release, so they stay as they are. Check the [changelog](CHANGELOG.md) for anything marked **Changed**, which tells you if a config file needs editing. Then use tray → **Reload**. The tray tooltip shows which version you're running.
+
+## Feedback
+
+This is an early release, and feedback shapes what comes next.
+
+- **Something broke?** [Open a bug report](../../issues/new/choose). It asks for your version (hover over the tray icon) and what happened. Remove tokens and anything private before pasting.
+- **Have an idea, or something felt clunky?** [Suggest a feature](../../issues/new/choose). The problem you ran into matters more than the solution.
 
 ## License
 

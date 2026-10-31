@@ -1,0 +1,22 @@
+name: Feature idea
+description: Suggest something that would make Claude-thingy more useful
+labels: ["idea"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The situation or annoyance, in your own words. This matters more than the solution.
+      placeholder: When I ..., I wish ...
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help?
+      description: Your idea for how it could work, if you have one.
+  - type: input
+    id: version
+    attributes:
+      label: Claude-thingy version
+      placeholder: "0.1.0"

@@ -1,3 +1,4 @@
+global AppVersion := "0.1.0"
 global Cfg := Map(), Projects := [], Connectors := Map(), Topics := Map(), Jobs := []
 global DryRun := false, CliMode := false, LastLog := "", LastToastJob := "", JobsMenu := "", RouteError := ""
 global TempDir := A_Temp "\claude-thingy", ConfigDir := A_ScriptDir "\config", ConnectorsPath := ConfigDir "\connectors.json"
