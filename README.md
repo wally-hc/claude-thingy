@@ -110,7 +110,7 @@ To start the tool when you log in (optional), press Win+R, type `shell:startup`,
 | `model` | Defaults to `haiku` for question and connector jobs and `sonnet` for code and plan jobs. You get `opus` only if you say "think hard". |
 | `max_turns` | From `config.json`, based on the kind |
 | `topic` | An existing topic ID, or `new:<slug>` |
-| `continue` | `resume` (same session and folder), `memory` (new session that reads the memory file), `fresh` |
+| `continue` | `resume` (same session and folder), `memory` (new session that reads the memory file), `fresh`, or `session:<name>` (start from one of your own Claude Code sessions in that project, see below) |
 | `ask_policy` | `async` (wait for you), or `best-guess-after:<minutes>` |
 
 ### Keyword rules (free, and they always win over the dispatcher)
@@ -129,6 +129,7 @@ To start the tool when you log in (optional), press Win+R, type `shell:startup`,
 | "think hard" | `model: opus` |
 | "use sonnet" / "with haiku" | that model |
 | starts with "continue", "resume", "back to" | `continue: resume` |
+| "where I left off", "my last session" (in a project) | `continue: session`. Then type the session's name in the popup. |
 | "start fresh", "new topic" | `continue: fresh` and a new topic named after the note, with no model call |
 | the title or ID of an existing topic (case and punctuation ignored) | that topic, and its workspace if none is named |
 | "best guess after 10 minutes", "don't ask me" | `ask_policy: best-guess-after:…` |
@@ -147,6 +148,21 @@ Every field is a dropdown or text box. If you change the kind and haven't touche
 ```
 
 This prints the spec for each note. It only runs the dispatcher and never starts a job.
+
+## Continuing your own Claude Code session
+
+A project or clone job can start from a Claude Code session you had open yourself, in the terminal or VS Code, so it knows everything you discussed there:
+
+1. In that session, give it a name: `/rename login-form`. Use letters, digits, dots and dashes.
+2. Say something like "In site, pick up where I left off and finish the form", or set **Continue** to `session:login-form` in the popup.
+
+The job runs `claude -p --resume login-form --fork-session` in the project folder. It works in its **own copy** of the conversation, named `claude-thingy-<topic>`, so your session isn't changed and its name stays unique. Your `instructions.md` still applies to the copy (`--system-prompt-snapshot off`).
+
+Things to know:
+
+- The name must belong to a session in the **same project folder**. Otherwise the job stops and tells you it couldn't find it. A full session ID works too.
+- Loading a session sends its whole conversation, so long sessions cost more. The popup reminds you.
+- There's deliberately no "latest session" option. Claude Code's `--continue` can pick up an unrelated session when the folder has none, which is both the wrong context and expensive.
 
 ## One assistant: briefing, topics and memory
 

@@ -16,13 +16,13 @@ ShowSpecGui(note, spec) {
     wsC := SpecRow(g, "Workspace", "Combo", wsItems, spec["workspace"], true)
     notifyC := SpecRow(g, "Notify", "DDL", Notifiers, spec["notify"])
     topicC := SpecRow(g, "Topic", "Combo", topicItems, spec["topic"], true)
-    contC := SpecRow(g, "Continue", "DDL", ContinueModes, spec["continue"])
+    contC := SpecRow(g, "Continue", "Combo", ContinueModes, spec["continue"])
     connC := SpecRow(g, "Connectors", "Edit", [], Join(spec["connectors"], ", "), true)
     askC := SpecRow(g, "If it asks", "Combo", ["async", "best-guess-after:10", "best-guess-after:30"], spec["ask_policy"])
     accessC := SpecRow(g, "Access", "DDL", ["read", "write"], spec["connector_access"], true)
     g.AddText("x+10 ys+3", "(write = allow changes in connected services)")
     infoC := g.AddText("xm w620", InfoLine(spec["topic"]))
-    warnC := g.AddText("xm w620 r2 cB00020", AccessWarning(spec["connectors"], spec["connector_access"]))
+    warnC := g.AddText("xm w620 r3 cB00020", SpecWarning(spec["connectors"], spec["connector_access"], spec["continue"]))
     g.AddButton("xm w160 Default", DryRun ? "Log spec (dry run)" : "Send").OnEvent("Click", SendClicked)
     g.AddButton("x+10 w100", "Cancel").OnEvent("Click", CancelClicked)
     g.OnEvent("Close", CancelClicked)
@@ -30,16 +30,18 @@ ShowSpecGui(note, spec) {
     st := {kind: spec["kind"]}
     kindC.OnEvent("Change", KindChanged)
     topicC.OnEvent("Change", TopicChanged)
-    accessC.OnEvent("Change", AccessChanged)
-    connC.OnEvent("Change", AccessChanged)
+    accessC.OnEvent("Change", WarningChanged)
+    connC.OnEvent("Change", WarningChanged)
+    contC.OnEvent("Change", WarningChanged)
     g.Show()
 
-    AccessChanged(*) {
+    WarningChanged(*) {
         names := []
         for c in SplitList(connC.Value)
             if (name := ConnectorName(c)) != ""
                 names.Push(name)
-        warnC.Value := AccessWarning(names, accessC.Text)
+        cont := contC.Value ? ContinueModes[contC.Value] : Trim(contC.Text)
+        warnC.Value := SpecWarning(names, accessC.Text, cont)
     }
 
     KindChanged(*) {
@@ -52,12 +54,15 @@ ShowSpecGui(note, spec) {
         topic := topicC.Value ? topicItems[topicC.Value] : Trim(topicC.Text)
         infoC.Value := InfoLine(topic)
         contC.Choose(SuggestContinue(topic))
+        WarningChanged()
     }
 
     SendClicked(*) {
         text := Trim(noteC.Value)
         if text = ""
             return Notify("The note is empty.", true)
+        if Trim(contC.Text) = "session"
+            return Notify("Type the session name in Continue as session:<name>, or pick another mode.", true)
         typedTopic := Trim(topicC.Text)
         s := Map("kind", kindC.Text, "model", modelC.Text, "workspace", Trim(wsC.Text), "notify", notifyC.Text
             , "topic", typedTopic, "topic_title", typedTopic = spec["topic"] ? spec["topic_title"] : "", "continue", contC.Text

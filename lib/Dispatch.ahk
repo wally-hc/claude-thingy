@@ -21,7 +21,10 @@ Route(note) {
     if !rules.Has("model")
         s["model"] := DefaultModel(s["kind"])
     s["max_turns"] := DefaultTurns(s["kind"])
-    s["continue"] := rules.Get("continue", "") = "fresh" ? "fresh" : SuggestContinue(s["topic"])
+    if rules.Get("continue", "") = "session" && s["workspace"] != "none"
+        s["continue"] := "session"
+    else
+        s["continue"] := rules.Get("continue", "") = "fresh" ? "fresh" : SuggestContinue(s["topic"])
     if s["continue"] = "resume" && Topics[s["topic"]].Get("workspace", "") != s["workspace"]
         s["continue"] := "memory"
     return s
@@ -54,6 +57,8 @@ RuleSpec(note) {
 
     if RegExMatch(t, "^\W*(?:continue|resume|pick up|back to)\b")
         s["continue"] := "resume"
+    if RegExMatch(t, "\b(?:where i left off|my (?:last|latest|current) session|from my session|continue my session)\b")
+        s["continue"] := "session"
     if RegExMatch(t, "\b(?:start fresh|from scratch|new topic)\b") {
         s["continue"] := "fresh"
         rest2 := Trim(RegExReplace(note, "i)\b(?:start fresh|from scratch|new topic)\b\W*"), " `t.,:;")
@@ -202,11 +207,16 @@ ValidSpec(s, note) {
     s["topic"] := topic
     ask := StrLower(GetStr(s, "ask_policy"))
     s["ask_policy"] := RegExMatch(ask, "^(async|best-guess-after:\d+)$") ? ask : "async"
-    cont := StrLower(GetStr(s, "continue"))
-    if !Topics.Has(topic)
-        cont := "fresh"
-    else if !InList(cont, ContinueModes) || (cont = "resume" && Topics[topic].Get("session", "") = "")
-        cont := SuggestContinue(topic)
+    cont := GetStr(s, "continue")
+    if RegExMatch(cont, "i)^session(?::([\w.-]+))?$", &sm)
+        cont := s["workspace"] = "none" ? (Topics.Has(topic) ? SuggestContinue(topic) : "fresh") : "session" (sm[1] != "" ? ":" sm[1] : "")
+    else {
+        cont := StrLower(cont)
+        if !Topics.Has(topic)
+            cont := "fresh"
+        else if !InList(cont, ContinueModes) || (cont = "resume" && Topics[topic].Get("session", "") = "")
+            cont := SuggestContinue(topic)
+    }
     s["continue"] := cont
     turns := s.Get("max_turns", "")
     s["max_turns"] := IsInteger(turns) && turns > 0 ? Integer(turns) : DefaultTurns(s["kind"])
@@ -251,6 +261,15 @@ InfoLine(topic) {
         line := "Continuing: " Topics[topic]["title"] ", " (days >= 9999 ? "not run yet" : days " day" (days = 1 ? "" : "s") " ago")
     }
     return RouteError != "" ? line "   (" RouteError ")" : line
+}
+
+SpecWarning(names, access, cont) {
+    text := AccessWarning(names, access)
+    if cont = "session"
+        text .= (text != "" ? "`n" : "") "To continue a session, type session:<name> in Continue. Name it first with /rename <name> in that session, in this project."
+    else if SubStr(cont, 1, 8) = "session:"
+        text .= (text != "" ? "`n" : "") "This loads that whole conversation, so long sessions cost more."
+    return text
 }
 
 AccessWarning(names, access) {

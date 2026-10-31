@@ -1,4 +1,6 @@
 StartJob(note, spec) {
+    if spec["continue"] = "session"
+        return Notify("To continue a session, put its name in Continue as session:<name>.", true)
     list := []
     for name in spec["connectors"] {
         if SubStr(name, 1, 4) != "new:"
@@ -11,6 +13,7 @@ StartJob(note, spec) {
     id := FormatTime(, "yyyyMMdd-HHmmss")
     job := Map("id", id, "spec", spec, "note", note, "topic", topic, "round", 1, "status", "starting", "started", A_Now
         , "session", "", "question", "", "deadline", "", "last_input", note, "last_shown", note, "branch", "", "compare", "")
+    job["fork"] := RegExMatch(spec["continue"], "^session:(.+)$", &fm) ? fm[1] : ""
     t := Topics[topic], sid := ""
     if spec["continue"] = "resume" && t.Get("session", "") != "" && DirExist(t.Get("folder", "")) && t.Get("workspace", "") = spec["workspace"] {
         cwd := t["folder"], sid := t["session"], job["branch"] := t.Get("branch", ""), job["compare"] := t.Get("compare", "")
@@ -122,7 +125,8 @@ JobPrompt(job) {
     s := "Topic: " TopicTitle(id) " (id: " id ")`nMemory file: " MemoryPath(id) "`n"
     s .= Map("memory", "Read the memory file first; it holds what you already know about this topic."
         , "resume", "This continues our earlier conversation on this topic."
-        , "fresh", "This is a new topic.")[spec["continue"]] "`n"
+        , "fresh", "This is a new topic."
+        , "session", "This continues from " Conf("owner_name", "the user") "'s Claude Code session in this folder. Use that conversation as context and treat this note as the next request.")[SubStr(spec["continue"], 1, 7) = "session" ? "session" : spec["continue"]] "`n"
     s .= "Job: " spec["kind"] ". " rules[spec["kind"]] "`n"
     names := Join(spec["connectors"], ", ")
     if spec["connectors"].Length && spec.Get("connector_access", "read") = "write"
@@ -195,7 +199,14 @@ LaunchClaude(job, text, sid := "") {
     if hasSettings := settings is Map && settings.Count
         FileWriteNew(base "-settings.json", JsonDump(settings))
     chat := spec["workspace"] = "none"
-    cmd := '"' Cfg["claude"] '" -p' (sid != "" ? " --resume " sid : "")
+    fork := job["round"] = 1 && sid = "" ? job.Get("fork", "") : ""
+    if sid != ""
+        from := " --resume " sid
+    else if fork != ""
+        from := " --resume " fork " --fork-session -n claude-thingy-" job["topic"] " --system-prompt-snapshot off"
+    else
+        from := ""
+    cmd := '"' Cfg["claude"] '" -p' from
         . " --model " spec["model"] " --max-turns " spec["max_turns"] " --output-format json"
         . (chat ? ' --permission-mode dontAsk --tools "Read,Glob,Grep,WebSearch,WebFetch"' : " --permission-mode acceptEdits")
         . (hasSettings ? ' --settings "' base '-settings.json"' : "")
@@ -204,7 +215,7 @@ LaunchClaude(job, text, sid := "") {
         . ' < "' base '-prompt.txt" > "' base '-out.json" 2> "' base '-err.txt"'
     EnvSet("CLAUDE_CODE_SUBAGENT_MODEL", Conf("subagent_model", "haiku"))
     Run(A_ComSpec ' /s /c "' cmd '"', job["cwd"], "Hide", &pid)
-    job["pid"] := pid, job["base"] := base, job["status"] := "running", job["round_started"] := A_Now, job["resumed"] := sid != ""
+    job["pid"] := pid, job["base"] := base, job["status"] := "running", job["round_started"] := A_Now, job["resumed"] := from != ""
     SaveJobs(), RebuildJobsMenu()
 }
 
@@ -221,7 +232,7 @@ FinishJob(job) {
     global LastLog
     raw := ReadIf(job["base"] "-out.json"), err := ReadIf(job["base"] "-err.txt"), spec := job["spec"]
     if job["round"] = 1 && job["resumed"] && InStr(raw err, "No conversation found") {
-        spec["continue"] := "memory"
+        spec["continue"] := "memory", job["fork"] := ""
         return LaunchClaude(job, JobPrompt(job))
     }
     res := "", sid := "", failed := true, size := 0, cost := 0
@@ -234,6 +245,10 @@ FinishJob(job) {
         steps := r["usage"]["iterations"], last := steps[steps.Length]
         size := last.Get("input_tokens", 0) + last.Get("cache_read_input_tokens", 0) + last.Get("cache_creation_input_tokens", 0) + last.Get("output_tokens", 0)
     }
+    if job["round"] = 1 && job.Get("fork", "") != "" && InStr(raw err, "does not match any session")
+        res := "I couldn't find a session called " job["fork"] " in this project. Name it with /rename " job["fork"] " in that session, then try again."
+    else if job["round"] = 1 && job.Get("fork", "") != "" && RegExMatch(raw err, "matches \d+ sessions")
+        res := "More than one session is called " job["fork"] ". Give the one you mean a unique name with /rename, then try again."
     res := Trim(res != "" ? res : raw "`n" err, " `t`r`n")
     memory := "", pos := 1
     while RegExMatch(res, "is)<memory>(.*?)</memory>", &mem, pos)

@@ -6,6 +6,10 @@ While the version is 0.x, Claude-thingy is in alpha: config formats and folder l
 
 ## [Unreleased]
 
+### Added
+
+- Continue mode `session:<name>`. A project or clone job can start from one of your own Claude Code sessions (named with `/rename`) in a forked copy, so your session isn't changed. Say "pick up where I left off" or type the name in the popup.
+
 ## [0.1.0] - 2026-10-31
 
 First alpha release.

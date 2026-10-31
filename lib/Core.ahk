@@ -5,7 +5,7 @@ global TempDir := A_Temp "\claude-thingy", ConfigDir := A_ScriptDir "\config", C
 global WorkDir := EnvGet("LOCALAPPDATA") "\claude-thingy\workspaces"
 global DataDir := "", LogDir := "", TopicDir := "", BriefingPath := "", JobsPath := ""
 global Kinds := ["question", "connector", "code", "plan"], Models := ["haiku", "sonnet", "opus"]
-global Notifiers := ["toast", "email", "slack-dm:me", "slack-dm:bot"], ContinueModes := ["resume", "memory", "fresh"]
+global Notifiers := ["toast", "email", "slack-dm:me", "slack-dm:bot"], ContinueModes := ["resume", "memory", "fresh", "session"]
 DirCreate(TempDir), SetDataDir(A_ScriptDir "\data")
 
 SetDataDir(dir) {
