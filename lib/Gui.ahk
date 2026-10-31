@@ -19,7 +19,10 @@ ShowSpecGui(note, spec) {
     contC := SpecRow(g, "Continue", "DDL", ContinueModes, spec["continue"])
     connC := SpecRow(g, "Connectors", "Edit", [], Join(spec["connectors"], ", "), true)
     askC := SpecRow(g, "If it asks", "Combo", ["async", "best-guess-after:10", "best-guess-after:30"], spec["ask_policy"])
+    accessC := SpecRow(g, "Access", "DDL", ["read", "write"], spec["connector_access"], true)
+    g.AddText("x+10 ys+3", "(write = allow changes in connected services)")
     infoC := g.AddText("xm w620", InfoLine(spec["topic"]))
+    warnC := g.AddText("xm w620 r2 cB00020", AccessWarning(spec["connectors"], spec["connector_access"]))
     g.AddButton("xm w160 Default", DryRun ? "Log spec (dry run)" : "Send").OnEvent("Click", SendClicked)
     g.AddButton("x+10 w100", "Cancel").OnEvent("Click", CancelClicked)
     g.OnEvent("Close", CancelClicked)
@@ -27,7 +30,17 @@ ShowSpecGui(note, spec) {
     st := {kind: spec["kind"]}
     kindC.OnEvent("Change", KindChanged)
     topicC.OnEvent("Change", TopicChanged)
+    accessC.OnEvent("Change", AccessChanged)
+    connC.OnEvent("Change", AccessChanged)
     g.Show()
+
+    AccessChanged(*) {
+        names := []
+        for c in SplitList(connC.Value)
+            if (name := ConnectorName(c)) != ""
+                names.Push(name)
+        warnC.Value := AccessWarning(names, accessC.Text)
+    }
 
     KindChanged(*) {
         if modelC.Text = DefaultModel(st.kind)
@@ -45,9 +58,11 @@ ShowSpecGui(note, spec) {
         text := Trim(noteC.Value)
         if text = ""
             return Notify("The note is empty.", true)
+        typedTopic := Trim(topicC.Text)
         s := Map("kind", kindC.Text, "model", modelC.Text, "workspace", Trim(wsC.Text), "notify", notifyC.Text
-            , "topic", Trim(topicC.Text), "topic_title", spec["topic_title"], "continue", contC.Text
-            , "ask_policy", Trim(askC.Text), "connectors", SplitList(connC.Value))
+            , "topic", typedTopic, "topic_title", typedTopic = spec["topic"] ? spec["topic_title"] : "", "continue", contC.Text
+            , "ask_policy", Trim(askC.Text), "connectors", SplitList(connC.Value)
+            , "connector_access", accessC.Text, "routed_by", spec.Get("routed_by", ""))
         s := ValidSpec(s, text)
         g.Destroy()
         if !DryRun

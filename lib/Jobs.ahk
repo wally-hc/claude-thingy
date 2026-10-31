@@ -23,7 +23,10 @@ StartJob(note, spec) {
             return
     }
     job["cwd"] := cwd, job["log"] := LogDir "\" id "-" topic ".md"
-    FileAppend("# " t["title"] "`n`n", job["log"], "UTF-8")
+    header := "# " t["title"] "`n`n"
+    if spec["connectors"].Length
+        header .= "Connectors: " Join(spec["connectors"], ", ") " (" (spec.Get("connector_access", "read") = "write" ? "changes allowed" : "read-only") ")`n`n"
+    FileAppend(header, job["log"], "UTF-8")
     Jobs.Push(job)
     LaunchClaude(job, JobPrompt(job), sid)
     Notify("On it: " t["title"])
@@ -46,7 +49,7 @@ EnsureTopic(spec) {
 AddConnector(name) {
     if !RegExMatch(name, "^[\w-]+$")
         return false
-    if MsgBox('This note asks for a new connector "' name '".`n`nAdd it? A window will open running "claude mcp add" so you can finish signing in.', "Claude-thingy", 262212) != "Yes"
+    if MsgBox('This note asks for a new connector "' name '".`n`nAdd it to connectors.json? It will only be used by Claude-thingy jobs that ask for it. A Claude window will open so you can sign in.', "Claude-thingy", 262212) != "Yes"
         return false
     ib := InputBox("HTTP URL of the " name " MCP server:", "New connector: " name, "w460 h130")
     url := Trim(ib.Value)
@@ -54,14 +57,14 @@ AddConnector(name) {
         return (Notify("No valid URL given, so the " name " connector was skipped.", true), false)
     Connectors[name] := Map("type", "http", "url", url, "description", name " (added from a voice note)")
     FileWriteNew(ConnectorsPath, JsonDump(Connectors, true))
-    ConnectorSignIn([name], '"' Cfg["claude"] '" mcp add --scope user --transport http ' name ' ' url ' & ')
+    ConnectorSignIn([name])
     return true
 }
 
-ConnectorSignIn(names, firstCmd := "") {
+ConnectorSignIn(names) {
     path := TempDir "\signin-mcp.json"
     WriteMcpConfig(names, path)
-    RunWait(A_ComSpec ' /s /c "' firstCmd 'echo. & echo Type /mcp, sign in to each server that asks for it, then type /exit. & echo. & "'
+    RunWait(A_ComSpec ' /s /c "echo. & echo Type /mcp, sign in to each server that asks for it, then type /exit. & echo. & "'
         . Cfg["claude"] '" --strict-mcp-config --mcp-config "' path '""', TempDir)
 }
 
@@ -75,7 +78,7 @@ PrepareWorkspace(job) {
     }
     if RegExMatch(ws, "^clone:([\w.-]+)/([\w.-]+)$", &m)
         return PrepareClone(job, m[1], m[2])
-    dir := TempDir "\chat"
+    dir := TempDir "\workspaces\" job["topic"]
     DirCreate(dir)
     return dir
 }
@@ -109,21 +112,26 @@ PrepareClone(job, owner, repo) {
 OpenInCode(path) => Run(A_ComSpec ' /c code "' path '"', , "Hide")
 
 JobPrompt(job) {
-    spec := job["spec"], id := job["topic"]
-    rules := Map("question", "Answer the question. Don't change any files except the memory file."
-        , "connector", "Use the connected tools (" Join(spec["connectors"], ", ") ") to do the task. Don't change local files except the memory file."
-        , "code", "Make the requested change in the working folder and keep it focused."
-        , "plan", "Write the plan to PLAN.md in the working folder, then stop. Don't make any other changes except the memory file.")
-    if spec["workspace"] = "none"
-        rules["plan"] := "Put the full plan in your reply."
-        , rules["code"] := "Put the code in your reply."
+    spec := job["spec"], id := job["topic"], chat := spec["workspace"] = "none"
+    rules := Map("question", "Answer the question."
+        , "connector", "Use the connected tools (" Join(spec["connectors"], ", ") ") to do the task."
+        , "code", chat ? "Put the code in your reply." : "Make the requested change in the working folder and keep it focused."
+        , "plan", chat ? "Put the full plan in your reply." : "Write the plan to PLAN.md in the working folder, then stop. Don't make any other changes except the memory file.")
     s := "Topic: " TopicTitle(id) " (id: " id ")`nMemory file: " MemoryPath(id) "`n"
     s .= Map("memory", "Read the memory file first; it holds what you already know about this topic."
         , "resume", "This continues our earlier conversation on this topic."
         , "fresh", "This is a new topic.")[spec["continue"]] "`n"
     s .= "Job: " spec["kind"] ". " rules[spec["kind"]] "`n"
-    if spec["workspace"] = "none"
-        s .= "This job isn't tied to a project: don't create or change any files except the memory file. Reply like a chat answer, with everything in your final message.`n"
+    names := Join(spec["connectors"], ", ")
+    if spec["connectors"].Length && spec.Get("connector_access", "read") = "write"
+        s .= "You may make the changes the note asks for in " names ".`n"
+    else if spec["connectors"].Length
+        s .= "You have read-only access to " names ". Don't try to change anything there.`n"
+    if chat
+        s .= "This is a chat, not a coding session: you have no file or shell tools. Reply with everything in your final message. "
+            . "End it with a <memory>...</memory> block holding the full updated memory for this topic (key facts, decisions, links, open questions, under ~300 words), then the optional QUESTION: line.`n"
+    else if spec["kind"] = "question" || spec["kind"] = "connector"
+        s .= "Don't change local files except the memory file.`n"
     if job["branch"] != ""
         s .= "Git: this folder is a clone of " SubStr(spec["workspace"], 7) " on branch " job["branch"] ". Commit your change, then push ONLY with: git push fork " job["branch"]
             . "`nNever push to origin or any other remote. End your summary with this compare link: " job["compare"] "`n"
@@ -132,9 +140,14 @@ JobPrompt(job) {
 
 AllowedTools(job) {
     spec := job["spec"], list := []
-    for name in spec["connectors"]
-        list.Push("mcp__" name)
-    if spec["kind"] = "question" || spec["kind"] = "plan"
+    for name in spec["connectors"] {
+        if spec.Get("connector_access", "read") = "write"
+            list.Push("mcp__" name "__*")
+        else
+            for tool in ReadTools(name)
+                list.Push("mcp__" name "__" tool)
+    }
+    if spec["workspace"] = "none" || spec["kind"] = "question" || spec["kind"] = "plan"
         list.Push("WebSearch", "WebFetch")
     if job["branch"] != ""
         list.Push("Bash(git add:*)", "Bash(git commit:*)", "Bash(git status:*)", "Bash(git diff:*)", "Bash(git log:*)"
@@ -147,8 +160,9 @@ WriteMcpConfig(names, path) {
     for name in names
         if Connectors.Has(name) && Connectors[name] is Map {
             def := Connectors[name].Clone()
-            if def.Has("description")
-                def.Delete("description")
+            for key in ["description", "read_tools"]
+                if def.Has(key)
+                    def.Delete(key)
             servers[name] := def
         }
     FileWriteNew(path, JsonDump(Map("mcpServers", servers)))
@@ -178,8 +192,10 @@ LaunchClaude(job, text, sid := "") {
     settings := Conf("claude_settings", Map())
     if hasSettings := settings is Map && settings.Count
         FileWriteNew(base "-settings.json", JsonDump(settings))
+    chat := spec["workspace"] = "none"
     cmd := '"' Cfg["claude"] '" -p' (sid != "" ? " --resume " sid : "")
-        . " --model " spec["model"] " --max-turns " spec["max_turns"] " --permission-mode acceptEdits --output-format json"
+        . " --model " spec["model"] " --max-turns " spec["max_turns"] " --output-format json"
+        . (chat ? ' --permission-mode dontAsk --tools "Read,Glob,Grep,WebSearch,WebFetch"' : " --permission-mode acceptEdits")
         . (hasSettings ? ' --settings "' base '-settings.json"' : "")
         . ' --strict-mcp-config --mcp-config "' base '-mcp.json" --append-system-prompt-file "' BriefingPath '" --add-dir "' TopicDir '"'
         . (tools != "" ? " --allowedTools" tools : "")
@@ -191,7 +207,7 @@ LaunchClaude(job, text, sid := "") {
 }
 
 PollJobs() {
-    for job in Jobs {
+    for job in Jobs.Clone() {
         if job["status"] = "running" && !ProcessExist(job["pid"])
             FinishJob(job)
         else if job["status"] = "waiting" && job["deadline"] != "" && A_Now >= job["deadline"]
@@ -217,6 +233,12 @@ FinishJob(job) {
         size := last.Get("input_tokens", 0) + last.Get("cache_read_input_tokens", 0) + last.Get("cache_creation_input_tokens", 0) + last.Get("output_tokens", 0)
     }
     res := Trim(res != "" ? res : raw "`n" err, " `t`r`n")
+    memory := "", pos := 1
+    while RegExMatch(res, "is)<memory>(.*?)</memory>", &mem, pos)
+        memory := Trim(mem[1], " `t`r`n"), pos := mem.Pos + mem.Len
+    res := Trim(RegExReplace(res, "is)\s*<memory>.*?</memory>\s*", "`n`n"), " `t`r`n")
+    if memory != ""
+        FileWriteNew(MemoryPath(job["topic"]), memory "`n")
     res := res != "" ? res : "(no output)"
     question := ""
     if !failed {
@@ -244,26 +266,12 @@ FinishJob(job) {
         SaveTopics()
     }
     FileAppend("**You:** " job.Get("last_shown", job["last_input"]) "`n`n" res "`n`n---`n`n", job["log"], "UTF-8")
-    SweepChatFolder(job)
     LastLog := job["log"]
     LogNote(Map("timestamp", Iso(), "transcript", job["last_input"], "spec", spec, "session_id", job["session"], "topic", job["topic"]
         , "status", job["status"], "duration_s", DateDiff(A_Now, job["round_started"], "Seconds"), "cost_usd", cost, "log", job["log"]))
     DeleteJobFiles(job)
     SaveJobs(), RebuildJobsMenu()
     NotifyJob(job, res)
-}
-
-SweepChatFolder(job) {
-    dir := job["cwd"]
-    if job["spec"]["workspace"] != "none" || InStr(dir, TempDir "\") != 1 || !DirExist(dir)
-        return
-    files := []
-    Loop Files dir "\*", "FR"
-        files.Push(A_LoopFileFullPath)
-    for path in files
-        try FileDelete(path)
-    Loop Files dir "\*", "D"
-        try DirDelete(A_LoopFileFullPath, true)
 }
 
 StopJob(job) {

@@ -2,7 +2,8 @@ Route(note) {
     global RouteError := ""
     rules := RuleSpec(note)
     llm := Map()
-    if !rules.Has("kind") || !rules.Has("workspace") || !rules.Has("topic") || (rules["kind"] = "connector" && !rules.Has("connectors"))
+    useModel := !rules.Has("kind") || !rules.Has("workspace") || !rules.Has("topic") || (rules["kind"] = "connector" && !rules.Has("connectors"))
+    if useModel
         llm := AskDispatcher(note)
     if rules.Has("notify") && llm.Has("connectors") && llm["connectors"] is Array {
         kept := []
@@ -11,8 +12,8 @@ Route(note) {
                 kept.Push(c)
         llm["connectors"] := kept
     }
-    s := Map("kind", "question", "workspace", "none", "connectors", [], "topic", "", "topic_title", ""
-        , "notify", Conf("notify_default", "toast"), "ask_policy", Conf("ask_policy_default", "async"))
+    s := Map("kind", "question", "workspace", "none", "connectors", [], "connector_access", "read", "topic", "", "topic_title", ""
+        , "notify", Conf("notify_default", "toast"), "ask_policy", Conf("ask_policy_default", "async"), "routed_by", useModel ? "haiku" : "rules")
     for src in [llm, rules]
         for k, v in src
             s[k] := v
@@ -28,11 +29,12 @@ Route(note) {
 
 RuleSpec(note) {
     s := Map(), t := StrLower(note)
-    if RegExMatch(t, "^\W*(?:quick\s+)?question\b")
+    lead := RegExReplace(t, "^\W*(?:(?:start fresh|from scratch|new topic|continue|resume)\b\W*)+")
+    if RegExMatch(lead, "^\W*(?:quick\s+)?question\b")
         s["kind"] := "question"
-    else if RegExMatch(t, "^\W*(?:think (?:really )?hard\W+(?:and\W+)?)?(?:make |write |draft )?(?:a |the )?plan\b|\bplan (?:out )?(?:a|an|the|my)\b")
+    else if RegExMatch(lead, "^\W*(?:think (?:really )?hard\W+(?:and\W+)?)?(?:make |write |draft )?(?:a |the )?plan\b|\bplan (?:out )?(?:a|an|the|my)\b")
         s["kind"] := "plan"
-    else if RegExMatch(t, "^\W*(?:please\s+)?(?:fix|implement|refactor|patch)\b|\bfix (?:the|a|this)\b")
+    else if RegExMatch(lead, "^\W*(?:please\s+)?(?:fix|implement|refactor|patch)\b|\bfix (?:the|a|this)\b")
         s["kind"] := "code"
 
     if RegExMatch(t, "\b(?:dm|message|ping|slack) me\b[^.;!?]*?\bbot\b|\b(?:with|via|from|using) the (?:slack )?bot\b")
@@ -52,8 +54,15 @@ RuleSpec(note) {
 
     if RegExMatch(t, "^\W*(?:continue|resume|pick up|back to)\b")
         s["continue"] := "resume"
-    else if RegExMatch(t, "\b(?:start fresh|from scratch|new topic)\b")
+    if RegExMatch(t, "\b(?:start fresh|from scratch|new topic)\b") {
         s["continue"] := "fresh"
+        rest2 := Trim(RegExReplace(note, "i)\b(?:start fresh|from scratch|new topic)\b\W*"), " `t.,:;")
+        rest2 := Trim(RegExReplace(rest2, "i)^(?:quick\s+)?question\b\W*"), " `t.,:;")
+        title := Trim(RegExReplace(rest2, "[.,;:!?].*$"))
+        s["topic"] := "new:" Slug(title != "" ? title : rest2)
+        s["topic_title"] := StrUpper(SubStr(title, 1, 1)) SubStr(title, 2)
+    } else if (id := TopicInNote(note)) != ""
+        s["topic"] := id
 
     if RegExMatch(t, "\bbest guess after (\d+) ?min", &m)
         s["ask_policy"] := "best-guess-after:" m[1]
@@ -86,8 +95,34 @@ RuleSpec(note) {
         if !s.Has("kind")
             s["kind"] := "connector"
     }
+    changes := RegExMatch(rest, "\b(?:post|send|reply|respond|message|create|update|edit|delete|remove|archive|add|write|comment|react|assign|invite|schedule|mark|move|rename)\b(?!\s+me\b)")
+    if changes || found.Length
+        s["connector_access"] := changes ? "write" : "read"
+    if !s.Has("workspace") && s.Has("topic") && Topics.Has(s["topic"]) && Topics[s["topic"]].Get("workspace", "") != ""
+        s["workspace"] := Topics[s["topic"]]["workspace"]
+    if !s.Has("workspace") && InList(s.Get("kind", ""), ["question", "connector"])
+        s["workspace"] := "none"
     return s
 }
+
+TopicInNote(note) {
+    text := " " NormWords(note) " ", best := "", bestLen := 0
+    for id, t in Topics
+        for name in [t["title"], id]
+            if (n := NormWords(name)) != "" && InStr(text, " " n " ") && StrLen(n) > bestLen
+                best := id, bestLen := StrLen(n)
+    return best
+}
+
+TopicByName(text) {
+    n := NormWords(text)
+    for id, t in Topics
+        if n != "" && (n = NormWords(t["title"]) || n = NormWords(id))
+            return id
+    return ""
+}
+
+NormWords(text) => Trim(RegExReplace(StrLower(text), "[^a-z0-9]+", " "))
 
 AskDispatcher(note) {
     global RouteError
@@ -102,7 +137,7 @@ AskDispatcher(note) {
     picked := Map()
     try {
         spec := ParseJsonIn(ParseJsonIn(ReadIf(base "-out.json"))["result"])
-        for k in ["kind", "workspace", "connectors", "topic", "topic_title"]
+        for k in ["kind", "workspace", "connectors", "connector_access", "topic", "topic_title"]
             if spec.Has(k)
                 picked[k] := spec[k]
     } catch as e
@@ -114,11 +149,12 @@ DispatcherSystem() {
     return Join([
         "You route one voice note to one background Claude Code job.",
         "Reply with ONLY one JSON object, no prose and no code fences, shaped like:",
-        '{"kind":"question","workspace":"none","connectors":[],"topic":"new:short-slug","topic_title":"Short title"}',
+        '{"kind":"question","workspace":"none","connectors":[],"connector_access":"read","topic":"new:short-slug","topic_title":"Short title"}',
         "Fields:",
         "- kind: question (answer or explain; no files change), connector (needs an external service from the connector list), code (change files in a project or GitHub repo), plan (design or plan something; the output is only a written plan).",
         "- workspace: project:<name> when the note is about one of the projects (match names loosely; spoken names may lose dashes); clone:<owner/repo> only for a GitHub repo that is not a project; otherwise none.",
         "- connectors: names from the connector list that the job needs, or []. Use new:<name> only when the job needs a service that is not in the list. Asking to be notified (DM me, email me) is not a connector.",
+        "- connector_access: write only when the note asks to change something in a connected service (post, send, reply, create, update, edit, delete, archive); otherwise read. Asking to be notified is not a change.",
         "- topic: the id of an existing topic when the note continues or clearly relates to it; otherwise new:<short-kebab-slug>.",
         "- topic_title: a short human title for the topic."
     ], "`n")
@@ -153,11 +189,17 @@ ValidSpec(s, note) {
                 list.Push(name)
         }
     s["connectors"] := list
-    topic := StrLower(GetStr(s, "topic"))
-    if !Topics.Has(topic) && !RegExMatch(topic, "^new:[a-z0-9][a-z0-9-]*$")
-        topic := "new:" Slug(note)
-    s["topic"] := topic
+    s["connector_access"] := list.Length && StrLower(GetStr(s, "connector_access")) = "write" ? "write" : "read"
+    s["routed_by"] := GetStr(s, "routed_by")
     s["topic_title"] := GetStr(s, "topic_title")
+    typed := GetStr(s, "topic"), topic := StrLower(typed)
+    if topic = ""
+        topic := "new:" Slug(note)
+    else if !Topics.Has(topic) && (id := TopicByName(typed)) != ""
+        topic := id
+    else if !Topics.Has(topic) && !RegExMatch(topic, "^new:[a-z0-9][a-z0-9-]*$")
+        typed := RegExReplace(typed, "i)^new:\s*"), topic := "new:" Slug(typed), s["topic_title"] := typed
+    s["topic"] := topic
     ask := StrLower(GetStr(s, "ask_policy"))
     s["ask_policy"] := RegExMatch(ask, "^(async|best-guess-after:\d+)$") ? ask : "async"
     cont := StrLower(GetStr(s, "continue"))
@@ -209,4 +251,18 @@ InfoLine(topic) {
         line := "Continuing: " Topics[topic]["title"] ", " (days >= 9999 ? "not run yet" : days " day" (days = 1 ? "" : "s") " ago")
     }
     return RouteError != "" ? line "   (" RouteError ")" : line
+}
+
+AccessWarning(names, access) {
+    lines := []
+    if access != "write"
+        for name in names
+            if Connectors.Has(name) && ReadTools(name).Length = 0
+                lines.Push(name " has no read_tools, so its tools will be blocked; switch to write or add read_tools")
+    return Join(lines, "`n")
+}
+
+ReadTools(name) {
+    def := Connectors.Has(name) ? Connectors[name] : ""
+    return def is Map && def.Has("read_tools") && def["read_tools"] is Array ? def["read_tools"] : []
 }

@@ -2,12 +2,31 @@
   "slack": {
     "type": "http",
     "url": "https://mcp.slack.com/mcp",
-    "description": "Slack: search and read channels, threads and DMs, post messages"
+    "description": "Slack: search and read channels, threads and DMs, post messages",
+    "read_tools": [
+      "slack_search_public",
+      "slack_search_public_and_private",
+      "slack_search_channels",
+      "slack_search_users",
+      "slack_read_channel",
+      "slack_read_thread",
+      "slack_read_user_profile",
+      "slack_read_canvas",
+      "slack_list_channel_members"
+    ]
   },
   "airtable": {
     "type": "http",
     "url": "https://mcp.airtable.com/mcp",
-    "description": "Airtable: list bases and tables, read, search and update records"
+    "description": "Airtable: list bases and tables, read, search and update records",
+    "read_tools": [
+      "list_bases",
+      "search_bases",
+      "list_tables_for_base",
+      "get_table_schema",
+      "list_records_for_table",
+      "search_records"
+    ]
   },
   "github": {
     "type": "http",
