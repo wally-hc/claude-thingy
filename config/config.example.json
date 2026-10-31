@@ -9,6 +9,7 @@
   "claude": "claude",
   "owner_name": "Your Name",
   "github_user": "your-github-username",
+  "data_dir": "data",
   "scratch_dir": "data\\scratch",
   "branch_prefix": "claude-thingy/",
   "subagent_model": "haiku",

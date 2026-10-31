@@ -1,11 +1,17 @@
 global Cfg := Map(), Projects := [], Connectors := Map(), Topics := Map(), Jobs := []
 global DryRun := false, CliMode := false, LastLog := "", LastToastJob := "", JobsMenu := "", RouteError := ""
-global TempDir := A_Temp "\claude-thingy", ConfigDir := A_ScriptDir "\config", DataDir := A_ScriptDir "\data"
-global LogDir := DataDir "\logs", TopicDir := DataDir "\topics", ConnectorsPath := ConfigDir "\connectors.json"
-global BriefingPath := TopicDir "\briefing.md", JobsPath := LogDir "\jobs.json"
+global TempDir := A_Temp "\claude-thingy", ConfigDir := A_ScriptDir "\config", ConnectorsPath := ConfigDir "\connectors.json"
+global WorkDir := EnvGet("LOCALAPPDATA") "\claude-thingy\workspaces"
+global DataDir := "", LogDir := "", TopicDir := "", BriefingPath := "", JobsPath := ""
 global Kinds := ["question", "connector", "code", "plan"], Models := ["haiku", "sonnet", "opus"]
 global Notifiers := ["toast", "email", "slack-dm:me", "slack-dm:bot"], ContinueModes := ["resume", "memory", "fresh"]
-DirCreate(TempDir), DirCreate(LogDir), DirCreate(TopicDir)
+DirCreate(TempDir), SetDataDir(A_ScriptDir "\data")
+
+SetDataDir(dir) {
+    global DataDir := dir, LogDir := dir "\logs", TopicDir := dir "\topics"
+    global BriefingPath := TopicDir "\briefing.md", JobsPath := LogDir "\jobs.json"
+    DirCreate(LogDir), DirCreate(TopicDir)
+}
 
 LoadConfig() {
     global Cfg, Projects, Connectors
@@ -25,6 +31,8 @@ LoadConfig() {
     }
     Cfg["mic"] := Conf("mic")
     Cfg["claude"] := Conf("claude") != "" ? Cfg["claude"] : "claude"
+    dir := Conf("data_dir", "data")
+    SetDataDir(RegExMatch(dir, "^(?:[A-Za-z]:|\\\\)") ? dir : A_ScriptDir "\" dir)
     LoadTopics()
     return true
 }
@@ -75,7 +83,8 @@ RecentTopics(count) {
     return list
 }
 
-MemoryPath(id) => TopicDir "\" id ".md"
+MemoryPath(id) => TopicDir "\" id "\memory.md"
+ConversationPath(id) => TopicDir "\" id "\conversation.md"
 TopicTitle(id) => Topics.Has(id) ? Topics[id]["title"] : RegExReplace(id, "^new:")
 
 CanResume(t) {
@@ -150,8 +159,17 @@ FindLinks(text) {
 }
 
 FileWriteNew(path, text) {
-    try FileDelete(path)
-    FileAppend(text, path, "UTF-8-RAW")
+    tmp := path ".tmp"
+    try FileDelete(tmp)
+    FileAppend(text, tmp, "UTF-8-RAW")
+    Loop 5 {
+        try {
+            FileMove(tmp, path, 1)
+            return
+        }
+        Sleep 200
+    }
+    FileMove(tmp, path, 1)
 }
 
 ReadIf(path) => FileExist(path) ? FileRead(path, "UTF-8") : ""
@@ -176,7 +194,7 @@ Notify(msg, isError := false) {
     TrayTip(msg, "Claude-thingy", isError ? 3 : 1)
 }
 
-LogNote(fields) => FileAppend(JsonDump(fields) "`n", LogDir "\notes.jsonl", "UTF-8-RAW")
+LogNote(fields) => FileAppend(JsonDump(fields) "`n", LogDir "\notes-" FormatTime(, "yyyy-MM") ".jsonl", "UTF-8-RAW")
 
 JsonStr(s) {
     s := StrReplace(StrReplace(String(s), "\", "\\"), '"', '\"')

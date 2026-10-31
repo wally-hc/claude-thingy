@@ -5,7 +5,7 @@ A Windows tool that turns a voice note into a background Claude Code job. Every 
 1. Press **Ctrl+Alt+Shift+J** (or the `hotkey` you set) to start recording, and press it again to stop. A beep marks the start and the stop. Recording stops on its own at `max_record_seconds`. The audio is transcribed on your machine with whisper.cpp, and the WAV file is deleted.
 2. A **dispatcher** turns the note into a job spec: what kind of job it is, where it runs, which connectors and model it uses, how you get notified, and which topic it belongs to. Free keyword rules run first. A single cheap Haiku call fills in anything they don't set, and it's skipped entirely when the rules already decide the kind, workspace and topic (plus the connectors, for connector jobs). The spec records which one routed it in `routed_by` (`rules` or `haiku`).
 3. A popup shows the transcript and the spec as editable fields. Fix anything that's wrong, then click **Send**.
-4. `claude -p` runs hidden with exactly that setup. When it finishes, you get a notification on the channel you chose, the result is saved to `data/logs/`, and the topic's memory file is updated.
+4. `claude -p` runs hidden with exactly that setup. When it finishes, you get a notification on the channel you chose, the reply is added to the topic's conversation in `data/topics/<topic>/`, and the topic's memory is updated.
 
 ## Dependencies
 
@@ -25,7 +25,7 @@ A Windows tool that turns a voice note into a background Claude Code job. Every 
 | --- | --- | --- |
 | `lib/` | The code | yes |
 | `config/` | Your settings, plus `*.example` templates | only the templates |
-| `data/` | Logs, topics and memory, `clone:` scratch folders | no |
+| `data/` | One folder per topic (conversation and memory), monthly note logs, `clone:` scratch folders. Can be moved, see [Storage](#storage). | no |
 | `tools/` | whisper.cpp and the model | no |
 
 ## Setup
@@ -52,6 +52,7 @@ In all JSON files, backslashes in paths must be doubled (`C:\\code\\site`).
 | `ffmpeg`, `whisper`, `model`, `mic`, `claude` | Paths to the tools. Leave `mic` empty to use the first microphone ffmpeg finds. |
 | `owner_name` | Your name. It replaces `{owner}` in `instructions.md`. |
 | `github_user` | Your GitHub username. `clone:` jobs push only to your fork, `github.com/<github_user>/<repo>`. |
+| `data_dir` | Where `data/` lives. A relative path is relative to this folder, and the default is `data`. See [Storage](#storage). |
 | `scratch_dir` | Where `clone:` jobs clone repos. A relative path is relative to this folder. The default is `data\scratch`. |
 | `claude_settings` | Extra Claude Code settings, passed to every job with `--settings`. The default is `{}`. |
 | `branch_prefix` | Prefix for the branches `clone:` jobs create. The default is `claude-thingy/`. |
@@ -87,9 +88,9 @@ If a note needs a service that isn't in the list, the spec gets `new:<name>`. Th
 Double-click `Claude-thingy.ahk`. Its tray menu has these items:
 
 - **Jobs**: running and waiting jobs, plus the last 10 finished ones. Click a waiting job to answer it, a running job to stop it, or a finished job to open its log.
-- **Open last result** and **Open logs folder**.
+- **Open last result** and **Open data folder**.
 - **Sign in to connectors**: see above.
-- **Dry run (route only, start no jobs)**: the popup still shows the spec, but **Send** only logs it to `data/logs/notes.jsonl`.
+- **Dry run (route only, start no jobs)**: the popup still shows the spec, but **Send** only logs it to `data/logs/notes-<yyyy-mm>.jsonl`.
 - **Reload** and **Exit**.
 
 To start the tool when you log in (optional), press Win+R, type `shell:startup`, and add a shortcut to `Claude-thingy.ahk` in that folder.
@@ -99,7 +100,7 @@ To start the tool when you log in (optional), press Win+R, type `shell:startup`,
 | Field | Values |
 | --- | --- |
 | `kind` | `question` (answer only), `connector` (uses MCP connectors), `code` (changes files), `plan` (writes `PLAN.md` and stops) |
-| `workspace` | `project:<name>` runs in that folder and opens VS Code there. `clone:<owner/repo>` makes a fresh clone on a new branch and pushes only to your fork. `none` is a chat: it has only read and web tools (no editing or shell), replies with everything in the message, and runs in its own folder per topic, `%TEMP%\claude-thingy\workspaces\<topic-id>`. |
+| `workspace` | `project:<name>` runs in that folder and opens VS Code there. `clone:<owner/repo>` makes a fresh clone on a new branch and pushes only to your fork. `none` is a chat: it has only read and web tools (no editing or shell), replies with everything in the message, and runs in its own folder per topic, `%LOCALAPPDATA%\claude-thingy\workspaces\<topic-id>`. |
 | `connectors` | Connector names from `connectors.json`, or `new:<name>` |
 | `connector_access` | `read` (default): only each connector's `read_tools`. `write`: every tool on the connector, for notes that ask to post, send, reply, create, update, edit, delete or archive something. |
 | `routed_by` | `rules` if the free keyword rules decided everything, `haiku` if the dispatcher model was called |
@@ -148,7 +149,8 @@ This prints the spec for each note. It only runs the dispatcher and never starts
 ## One assistant: briefing, topics and memory
 
 - Before every job, `data/topics/briefing.md` is built from `instructions.md` plus a world index (projects plus your most recent topics with their memory files) and passed with `--append-system-prompt-file`. Its wording stays the same between jobs so prompt caching works well.
-- `data/topics/<id>.md` is each topic's memory. Project and clone jobs edit it directly. Chat jobs (`none`) have no file tools, so they end their reply with a `<memory>…</memory>` block. The app saves that block to the memory file and removes it from the reply before logging and notifying. If the block is missing, the old memory stays. Jobs can read `data/topics/` through `--add-dir`.
+- `data/topics/<id>/memory.md` is each topic's memory. Project and clone jobs edit it directly. Chat jobs (`none`) have no file tools, so they end their reply with a `<memory>…</memory>` block. The app saves that block to the memory file and removes it from the reply before logging and notifying. If the block is missing, the old memory stays. Jobs can read `data/topics/` through `--add-dir`.
+- `data/topics/<id>/conversation.md` is the whole conversation on that topic: every note or answer and every reply, in order.
 - `data/topics/index.json` stores each topic's ID, title, one-line summary, last session ID, working folder, last date and approximate context size.
 
 ## Questions and answers
@@ -163,8 +165,8 @@ An answer resumes the same session (`--resume <id>`) from the same folder with t
 
 ## Logs
 
-- `data/logs/<job-id>-<topic>.md` is the conversation: each note or answer and each reply. This is what **Jobs** and **Open last result** open.
-- `data/logs/notes.jsonl` has one line per run with the transcript, the spec, session ID, topic, status, duration, cost and log path. It also records dry runs and cancelled notes.
+- **Jobs** and **Open last result** open the topic's `conversation.md`.
+- `data/logs/notes-<yyyy-mm>.jsonl` (one file per month) has one line per run with the transcript, the spec, session ID, topic, status, duration, cost and log path. It also records dry runs and cancelled notes.
 - `data/logs/jobs.json` stores job state, so running and waiting jobs survive a **Reload**.
 
 ## Safety
@@ -176,6 +178,23 @@ An answer resumes the same session (`--resume <id>`) from the same folder with t
 - Only the connectors in the spec are loaded. With read access, only `mcp__<name>__<tool>` for each of its `read_tools` is allowed. With write access, `mcp__<name>__*` is allowed. Chat, question and plan jobs may also use web search and fetch.
 - User plugins aren't disabled, so the WakaTime plugin keeps working.
 
+## Storage
+
+Everything Claude-thingy writes is small text: about 4 KB per job, so a thousand jobs come to around 4 MB. All saves go to a temporary file first and then replace the real file, so a crash can't leave a half-written file behind.
+
+To keep this data off your laptop, put it in a cloud-synced folder:
+
+1. Quit Claude-thingy and move the `data` folder into, for example, OneDrive (`C:\Users\<you>\OneDrive\Claude-thingy-data`).
+2. Set `data_dir` in `config.json` to that path, then start Claude-thingy.
+3. Optional: in File Explorer, right-click the folder and choose **Free up space**. OneDrive then keeps only placeholders on your disk and downloads a file when it's opened.
+
+Other places things are stored:
+
+- `tools/` (about 170 MB) holds whisper.cpp and its model. Its size is fixed.
+- `clone:` jobs keep a full clone in `data\scratch` per topic. These are the only folders that can get big. Delete old ones once their branch is pushed.
+- Chat folders in `%LOCALAPPDATA%\claude-thingy\workspaces` stay empty. They only exist so a topic can be resumed from the same folder. Unlike `%TEMP%`, Windows doesn't clean them up automatically.
+- Claude Code keeps its own session history in its user folder. Claude-thingy doesn't manage that.
+
 ## Hackatime
 
 Every job is tracked; nothing is excluded. User plugins stay on, so the WakaTime plugin runs for every job. The project name comes from the folder a job runs in:
@@ -184,7 +203,7 @@ Every job is tracked; nothing is excluded. User plugins stay on, so the WakaTime
 | --- | --- | --- |
 | `project:<name>` | the project folder (VS Code opens there too) | the project's folder name, e.g. `site` |
 | `clone:<owner/repo>` | `data\scratch\<repo>-<job-id>` | that clone folder's name, e.g. `site-20261031-101500` |
-| `none` (chat) | `%TEMP%\claude-thingy\workspaces\<topic-id>` | the topic ID, e.g. `merge-vs-rebase` |
+| `none` (chat) | `%LOCALAPPDATA%\claude-thingy\workspaces\<topic-id>` | the topic ID, e.g. `merge-vs-rebase` |
 | the dispatcher's Haiku call (and `route-test.ahk`) | `%TEMP%\claude-thingy` | `claude-thingy` |
 
 ## TODO

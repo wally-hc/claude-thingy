@@ -14,7 +14,7 @@ JobsMenu := Menu()
 A_TrayMenu.Delete()
 A_TrayMenu.Add("Jobs", JobsMenu)
 A_TrayMenu.Add("Open last result", (*) => OpenLastResult())
-A_TrayMenu.Add("Open logs folder", (*) => Run(LogDir))
+A_TrayMenu.Add("Open data folder", (*) => Run(DataDir))
 A_TrayMenu.Add("Sign in to connectors", (*) => LoadConfig() && ConnectorSignIn(ConnectorKeys()))
 A_TrayMenu.Add(DryRunItem, ToggleDryRun)
 A_TrayMenu.Add("Reload", (*) => Reload())
@@ -169,10 +169,11 @@ ConnectorKeys() {
 
 OpenLastResult() {
     global LastLog
+    newest := ""
     if LastLog = ""
-        Loop Files LogDir "\*.md"
-            if LastLog = "" || A_LoopFileFullPath > LastLog
-                LastLog := A_LoopFileFullPath
+        Loop Files TopicDir "\*", "D"
+            if FileExist(path := A_LoopFileFullPath "\conversation.md") && FileGetTime(path) > newest
+                LastLog := path, newest := FileGetTime(path)
     if LastLog = ""
         return Notify("No results yet.")
     OpenFile(LastLog)

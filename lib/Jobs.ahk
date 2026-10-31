@@ -22,11 +22,13 @@ StartJob(note, spec) {
         if (cwd := PrepareWorkspace(job)) = ""
             return
     }
-    job["cwd"] := cwd, job["log"] := LogDir "\" id "-" topic ".md"
-    header := "# " t["title"] "`n`n"
+    DirCreate(TopicDir "\" topic)
+    job["cwd"] := cwd, job["log"] := ConversationPath(topic)
+    header := FileExist(job["log"]) ? "" : "# " t["title"] "`n`n"
     if spec["connectors"].Length
         header .= "Connectors: " Join(spec["connectors"], ", ") " (" (spec.Get("connector_access", "read") = "write" ? "changes allowed" : "read-only") ")`n`n"
-    FileAppend(header, job["log"], "UTF-8")
+    if header != ""
+        FileAppend(header, job["log"], "UTF-8")
     Jobs.Push(job)
     LaunchClaude(job, JobPrompt(job), sid)
     Notify("On it: " t["title"])
@@ -78,7 +80,7 @@ PrepareWorkspace(job) {
     }
     if RegExMatch(ws, "^clone:([\w.-]+)/([\w.-]+)$", &m)
         return PrepareClone(job, m[1], m[2])
-    dir := TempDir "\workspaces\" job["topic"]
+    dir := WorkDir "\" job["topic"]
     DirCreate(dir)
     return dir
 }
