@@ -1,5 +1,5 @@
 #Requires AutoHotkey v2.0
-#SingleInstance Force
+#SingleInstance Off
 Persistent
 SetWorkingDir A_ScriptDir
 #Include lib\Core.ahk
@@ -7,16 +7,36 @@ SetWorkingDir A_ScriptDir
 #Include lib\Jobs.ahk
 #Include lib\Notify.ahk
 #Include lib\Gui.ahk
+#Include lib\Dashboard.ahk
 
-global Rec := "", RecGui := "", DryRunItem := "Dry run (route only, start no jobs)", HotkeyLabel := ""
+global Rec := "", RecGui := ""
+wantDashboard := InList("/dashboard", A_Args)
+DetectHiddenWindows(true)
+for hwnd in WinGetList(A_ScriptFullPath " - AutoHotkey ahk_class AutoHotkey") {
+    if hwnd = A_ScriptHwnd
+        continue
+    if wantDashboard {
+        PostMessage(0x8001, 1, 0, , hwnd)
+        ExitApp()
+    }
+    PostMessage(0x8001, 2, 0, , hwnd)
+    WinWaitClose(hwnd, , 5)
+}
+DetectHiddenWindows(false)
+OnMessage(0x8001, AppMessage)
+
+if FileExist(IconPath)
+    TraySetIcon(IconPath)
 JobsMenu := Menu()
-
 A_TrayMenu.Delete()
+A_TrayMenu.Add("Dashboard", ShowDashboard)
+A_TrayMenu.Default := "Dashboard"
 A_TrayMenu.Add("Jobs", JobsMenu)
-A_TrayMenu.Add("Open last result", (*) => OpenLastResult())
+A_TrayMenu.Add("Open last result", OpenLastResult)
 A_TrayMenu.Add("Open data folder", (*) => Run(DataDir))
 A_TrayMenu.Add("Sign in to connectors", (*) => LoadConfig() && ConnectorSignIn(ConnectorKeys()))
 A_TrayMenu.Add(DryRunItem, ToggleDryRun)
+A_TrayMenu.Add("Add desktop shortcut", CreateDesktopShortcut)
 A_TrayMenu.Add("Reload", (*) => Reload())
 A_TrayMenu.Add("Exit", (*) => ExitApp())
 OnMessage(0x404, TrayEvent)
@@ -31,6 +51,16 @@ if Conf("dry_run", 0)
 LoadJobs()
 RebuildJobsMenu()
 SetTimer(PollJobs, 3000)
+if wantDashboard
+    ShowDashboard()
+
+AppMessage(wParam, *) {
+    if wParam = 1
+        SetTimer(ShowDashboard, -10)
+    else if wParam = 2
+        ExitApp()
+    return 1
+}
 
 RegisterHotkey() {
     hk := Conf("hotkey", "^!+j")
@@ -145,12 +175,6 @@ FindMic() {
     return found := RegExMatch(text, '"([^"]+)" \(audio\)', &m) ? m[1] : ""
 }
 
-ToggleDryRun(*) {
-    global DryRun := !DryRun
-    A_TrayMenu.ToggleCheck(DryRunItem)
-    Notify(DryRun ? "Dry run is on: notes are routed but no jobs start." : "Dry run is off.")
-}
-
 TrayEvent(wParam, lParam, *) {
     if (lParam & 0xFFFF) != 0x405 || !IsObject(LastToastJob)
         return
@@ -160,21 +184,3 @@ TrayEvent(wParam, lParam, *) {
         OpenFile(LastToastJob["log"])
 }
 
-ConnectorKeys() {
-    keys := []
-    for name in Connectors
-        keys.Push(name)
-    return keys
-}
-
-OpenLastResult() {
-    global LastLog
-    newest := ""
-    if LastLog = ""
-        Loop Files TopicDir "\*", "D"
-            if FileExist(path := A_LoopFileFullPath "\conversation.md") && FileGetTime(path) > newest
-                LastLog := path, newest := FileGetTime(path)
-    if LastLog = ""
-        return Notify("No results yet.")
-    OpenFile(LastLog)
-}

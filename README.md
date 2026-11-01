@@ -90,13 +90,28 @@ If a note needs a service that isn't in the list, the spec gets `new:<name>`. Th
 
 Double-click `Claude-thingy.ahk`. Its tray menu has these items:
 
+- **Dashboard** (also opens when you double-click the tray icon): see [Dashboard](#dashboard).
 - **Jobs**: running and waiting jobs, plus the last 10 finished ones. Click a waiting job to answer it, a running job to stop it, or a finished job to open its log.
 - **Open last result** and **Open data folder**.
 - **Sign in to connectors**: see above.
 - **Dry run (route only, start no jobs)**: the popup still shows the spec, but **Send** only logs it to `data/logs/notes-<yyyy-mm>.jsonl`.
+- **Add desktop shortcut**: puts a Claude-thingy shortcut on your desktop that opens the dashboard.
 - **Reload** and **Exit**.
 
 To start the tool when you log in (optional), press Win+R, type `shell:startup`, and add a shortcut to `Claude-thingy.ahk` in that folder.
+
+## Dashboard
+
+A window with live information from the running app. Open it from the desktop shortcut, the taskbar, or by double-clicking the tray icon.
+
+- **Home**: how many jobs are running, waiting for you or done today, this month's cost, and the most recent jobs. Double-click a job to open it.
+- **Jobs**: every job, with buttons to open its conversation, answer it, or stop it.
+- **Topics**: every topic, with its conversation and memory.
+- **Settings**: version, hotkey and data folder, a dry-run switch, and buttons to open the settings files, sign in to connectors, open the data folder, add the desktop shortcut and reload.
+
+**Desktop and taskbar:** use tray → **Add desktop shortcut** (or the button in Settings). Windows doesn't let apps pin themselves to the taskbar, so right-click the new desktop shortcut, choose **Show more options**, then **Pin to taskbar**. The shortcut runs `Claude-thingy.ahk /dashboard`. If Claude-thingy is already running, it opens the dashboard in that copy instead of starting a second one. Starting `Claude-thingy.ahk` without `/dashboard` while it's running restarts it, as before.
+
+Closing the window only hides it; the app keeps running in the tray.
 
 ## The job spec
 

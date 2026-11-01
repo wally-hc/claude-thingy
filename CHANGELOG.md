@@ -8,6 +8,8 @@ While the version is 0.x, Claude-thingy is in alpha: config formats and folder l
 
 ### Added
 
+- A dashboard window (Home, Jobs, Topics, Settings) with live job counts, this month's cost, and buttons to open, answer or stop jobs. It opens from a desktop shortcut, the taskbar or a double-click on the tray icon, and reuses the running app instead of starting a second copy.
+- An app icon, and tray → **Add desktop shortcut**.
 - Continue mode `session`. A project job can start from your latest Claude Code session in that project (or a specific one with `session:<name>`), in a forked copy, so your session isn't changed. Say "pick up where I left off". Claude-thingy lists only file names, dates and sizes in Claude Code's folder for that project, and skips its own sessions. The new `session_max_mb` setting caps how big a session it will load.
 
 ## [0.1.0] - 2026-10-31

@@ -368,6 +368,7 @@ RebuildJobsMenu() {
     }
     if !n
         JobsMenu.Add("(no jobs yet)", (*) => 0), JobsMenu.Disable("(no jobs yet)")
+    RefreshDashboard()
 }
 
 AddJobItem(job, n) => JobsMenu.Add(n ". [" job["status"] "] " SubStr(TopicTitle(job["topic"]), 1, 50), JobClicked.Bind(job))

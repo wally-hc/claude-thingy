@@ -7,6 +7,7 @@ SetWorkingDir A_ScriptDir
 #Include lib\Jobs.ahk
 #Include lib\Notify.ahk
 #Include lib\Gui.ahk
+#Include lib\Dashboard.ahk
 
 CliMode := true
 if !LoadConfig()

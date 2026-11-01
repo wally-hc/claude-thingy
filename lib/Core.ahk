@@ -1,6 +1,7 @@
 global AppVersion := "0.1.0"
 global Cfg := Map(), Projects := [], Connectors := Map(), Topics := Map(), Jobs := []
 global DryRun := false, CliMode := false, LastLog := "", LastToastJob := "", JobsMenu := "", RouteError := ""
+global DryRunItem := "Dry run (route only, start no jobs)", HotkeyLabel := "", IconPath := A_ScriptDir "\assets\claude-thingy.ico"
 global TempDir := A_Temp "\claude-thingy", ConfigDir := A_ScriptDir "\config", ConnectorsPath := ConfigDir "\connectors.json"
 global WorkDir := EnvGet("LOCALAPPDATA") "\claude-thingy\workspaces"
 global DataDir := "", LogDir := "", TopicDir := "", BriefingPath := "", JobsPath := ""
@@ -204,6 +205,32 @@ RunCapture(cmd, cwd := "") {
     try FileDelete(out)
     RunWait(A_ComSpec ' /s /c "' cmd ' > "' out '" 2>&1"', cwd, "Hide")
     return Trim(ReadIf(out), " `t`r`n")
+}
+
+ToggleDryRun(*) {
+    global DryRun := !DryRun
+    try A_TrayMenu.ToggleCheck(DryRunItem)
+    RefreshDashboard()
+    Notify(DryRun ? "Dry run is on: notes are routed but no jobs start." : "Dry run is off.")
+}
+
+ConnectorKeys() {
+    keys := []
+    for name in Connectors
+        keys.Push(name)
+    return keys
+}
+
+OpenLastResult(*) {
+    global LastLog
+    newest := ""
+    if LastLog = ""
+        Loop Files TopicDir "\*", "D"
+            if FileExist(path := A_LoopFileFullPath "\conversation.md") && FileGetTime(path) > newest
+                LastLog := path, newest := FileGetTime(path)
+    if LastLog = ""
+        return Notify("No results yet.")
+    OpenFile(LastLog)
 }
 
 OpenFile(path) {
