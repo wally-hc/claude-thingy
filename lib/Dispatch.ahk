@@ -208,9 +208,12 @@ ValidSpec(s, note) {
     ask := StrLower(GetStr(s, "ask_policy"))
     s["ask_policy"] := RegExMatch(ask, "^(async|best-guess-after:\d+)$") ? ask : "async"
     cont := GetStr(s, "continue")
-    if RegExMatch(cont, "i)^session(?::([\w.-]+))?$", &sm)
-        cont := s["workspace"] = "none" ? (Topics.Has(topic) ? SuggestContinue(topic) : "fresh") : "session" (sm[1] != "" ? ":" sm[1] : "")
-    else {
+    if RegExMatch(cont, "i)^session(?::([\w.-]+))?$", &sm) {
+        if s["workspace"] = "none" || (sm[1] = "" && SubStr(s["workspace"], 1, 8) != "project:")
+            cont := Topics.Has(topic) ? SuggestContinue(topic) : "fresh"
+        else
+            cont := "session" (sm[1] != "" ? ":" sm[1] : "")
+    } else {
         cont := StrLower(cont)
         if !Topics.Has(topic)
             cont := "fresh"
@@ -263,13 +266,25 @@ InfoLine(topic) {
     return RouteError != "" ? line "   (" RouteError ")" : line
 }
 
-SpecWarning(names, access, cont) {
+SpecWarning(names, access, cont, ws := "") {
     text := AccessWarning(names, access)
     if cont = "session"
-        text .= (text != "" ? "`n" : "") "To continue a session, type session:<name> in Continue. Name it first with /rename <name> in that session, in this project."
+        text .= (text != "" ? "`n" : "") SessionInfo(ws)
     else if SubStr(cont, 1, 8) = "session:"
         text .= (text != "" ? "`n" : "") "This loads that whole conversation, so long sessions cost more."
     return text
+}
+
+SessionInfo(ws) {
+    if !RegExMatch(ws, "^project:(.+)$", &m) || !(p := FindProject(m[1]))
+        return "Continuing your latest session only works for a project."
+    s := LatestSession(p["path"])
+    if !IsObject(s)
+        return "There's no Claude Code session in " p["name"] " to continue."
+    when := FormatTime(s.time, "MMM d, HH:mm")
+    if s.kb > Conf("session_max_mb", 2) * 1024
+        return "Your latest session in " p["name"] " (" when ") is " s.kb " KB, over the session_max_mb limit, so it won't start."
+    return "Continues your latest session in " p["name"] " (last used " when ", " s.kb " KB). Bigger sessions cost more."
 }
 
 AccessWarning(names, access) {

@@ -59,6 +59,7 @@ In all JSON files, backslashes in paths must be doubled (`C:\\code\\site`).
 | `claude_settings` | Extra Claude Code settings, passed to every job with `--settings`. The default is `{}`. |
 | `branch_prefix` | Prefix for the branches `clone:` jobs create. The default is `claude-thingy/`. |
 | `subagent_model` | Model for subagents, passed as `CLAUDE_CODE_SUBAGENT_MODEL`. The default is `haiku`. |
+| `session_max_mb` | The largest session (in MB) that `continue: session` will load. The default is 2. |
 | `resume_max_days`, `resume_max_tokens` | A topic resumes its last session only if that session is at most this many days old and its context is at most this many tokens. Otherwise the job starts fresh and reads the memory file. |
 | `max_turns` | Turn limit for each kind of job. |
 | `notify_default`, `ask_policy_default` | Used when a note doesn't say how to notify you or what to do if Claude has a question. |
@@ -110,7 +111,7 @@ To start the tool when you log in (optional), press Win+R, type `shell:startup`,
 | `model` | Defaults to `haiku` for question and connector jobs and `sonnet` for code and plan jobs. You get `opus` only if you say "think hard". |
 | `max_turns` | From `config.json`, based on the kind |
 | `topic` | An existing topic ID, or `new:<slug>` |
-| `continue` | `resume` (same session and folder), `memory` (new session that reads the memory file), `fresh`, or `session:<name>` (start from one of your own Claude Code sessions in that project, see below) |
+| `continue` | `resume` (same session and folder), `memory` (new session that reads the memory file), `fresh`, `session` (start from your latest Claude Code session in that project), or `session:<name>` (a specific session). See below. |
 | `ask_policy` | `async` (wait for you), or `best-guess-after:<minutes>` |
 
 ### Keyword rules (free, and they always win over the dispatcher)
@@ -129,7 +130,7 @@ To start the tool when you log in (optional), press Win+R, type `shell:startup`,
 | "think hard" | `model: opus` |
 | "use sonnet" / "with haiku" | that model |
 | starts with "continue", "resume", "back to" | `continue: resume` |
-| "where I left off", "my last session" (in a project) | `continue: session`. Then type the session's name in the popup. |
+| "where I left off", "my last session" (in a project) | `continue: session`, which continues your latest session there |
 | "start fresh", "new topic" | `continue: fresh` and a new topic named after the note, with no model call |
 | the title or ID of an existing topic (case and punctuation ignored) | that topic, and its workspace if none is named |
 | "best guess after 10 minutes", "don't ask me" | `ask_policy: best-guess-after:…` |
@@ -151,19 +152,18 @@ This prints the spec for each note. It only runs the dispatcher and never starts
 
 ## Continuing your own Claude Code session
 
-A project or clone job can start from a Claude Code session you had open yourself, in the terminal or VS Code, so it knows everything you discussed there:
+A project job can start from a Claude Code session you had open yourself, in the terminal or VS Code, so it knows everything you discussed there. Say something like "In site, pick up where I left off and finish the form", or set **Continue** to `session` in the popup.
 
-1. In that session, give it a name: `/rename login-form`. Use letters, digits, dots and dashes.
-2. Say something like "In site, pick up where I left off and finish the form", or set **Continue** to `session:login-form` in the popup.
+- **`session`** continues your **latest session in that project**. Claude-thingy looks in Claude Code's own per-project folder, `~\.claude\projects\<project path with every non-letter/digit as ->\`. It reads only file names, dates and sizes there, never the contents, and picks the session you used most recently. Sessions that Claude-thingy started itself are skipped, so it won't continue its own jobs. The popup shows which session it will use (when you last used it and how big it is).
+- **`session:<name>`** continues a specific session instead. Name it first with `/rename <name>` in that session. A full session ID also works.
 
-The job runs `claude -p --resume login-form --fork-session` in the project folder. It works in its **own copy** of the conversation, named `claude-thingy-<topic>`, so your session isn't changed and its name stays unique. Your `instructions.md` still applies to the copy (`--system-prompt-snapshot off`).
+The job runs `claude -p --resume <id> --fork-session` in the project folder. It works in its **own copy** of the conversation, so your session isn't changed. Your `instructions.md` still applies to the copy (`--system-prompt-snapshot off`), and every job's session gets an ID that Claude-thingy chooses up front (`--session-id`), so it always knows which sessions are its own.
 
 Things to know:
 
-- The name must belong to a session in the **same project folder**. Otherwise the job stops and tells you it couldn't find it. A full session ID works too.
-- Loading a session sends its whole conversation, so long sessions cost more. The popup reminds you.
-- There's deliberately no "latest session" option. Claude Code's `--continue` can pick up an unrelated session when the folder has none, which is both the wrong context and expensive.
-
+- **Size limit:** loading a session sends its whole conversation, so the job won't start if your latest session is bigger than `session_max_mb` (default 2 MB, a long working session). Raise it in `config.json` if you want.
+- **Project folder only:** only sessions started at the project's top folder are found. A session started in a subfolder (e.g. `site\src`) is stored under that subfolder's path.
+- **No `--continue`:** Claude-thingy deliberately doesn't use Claude Code's `--continue`. In testing it sometimes loaded far more than the session you'd expect, which made the cost unpredictable.
 ## One assistant: briefing, topics and memory
 
 - Before every job, `data/topics/briefing.md` is built from `instructions.md` plus a world index (projects plus your most recent topics with their memory files) and passed with `--append-system-prompt-file`. Its wording stays the same between jobs so prompt caching works well.

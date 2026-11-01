@@ -15,6 +15,7 @@
   "subagent_model": "haiku",
   "claude_settings": {},
   "resume_max_days": 3,
+  "session_max_mb": 2,
   "resume_max_tokens": 80000,
   "max_turns": { "question": 10, "connector": 20, "code": 40, "plan": 25 },
   "notify_default": "toast",

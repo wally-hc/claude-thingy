@@ -84,6 +84,30 @@ RecentTopics(count) {
     return list
 }
 
+NewUuid() {
+    guid := Buffer(16), text := Buffer(80)
+    DllCall("ole32\CoCreateGuid", "Ptr", guid)
+    DllCall("ole32\StringFromGUID2", "Ptr", guid, "Ptr", text, "Int", 40)
+    return StrLower(Trim(StrGet(text, "UTF-16"), "{}"))
+}
+
+LatestSession(folder) {
+    home := EnvGet("CLAUDE_CONFIG_DIR") != "" ? EnvGet("CLAUDE_CONFIG_DIR") : EnvGet("USERPROFILE") "\.claude"
+    dir := home "\projects\" RegExReplace(RTrim(folder, "\"), "[^A-Za-z0-9]", "-")
+    own := Map()
+    for job in Jobs
+        own[job.Get("session", "")] := true
+    for id, t in Topics
+        own[t.Get("session", "")] := true
+    best := ""
+    Loop Files dir "\*.jsonl" {
+        id := SubStr(A_LoopFileName, 1, -6)
+        if RegExMatch(id, "^[0-9a-f-]{36}$") && !own.Has(id) && (best = "" || A_LoopFileTimeModified > best.time)
+            best := {id: id, time: A_LoopFileTimeModified, kb: Round(A_LoopFileSize / 1024)}
+    }
+    return best
+}
+
 MemoryPath(id) => TopicDir "\" id "\memory.md"
 ConversationPath(id) => TopicDir "\" id "\conversation.md"
 TopicTitle(id) => Topics.Has(id) ? Topics[id]["title"] : RegExReplace(id, "^new:")

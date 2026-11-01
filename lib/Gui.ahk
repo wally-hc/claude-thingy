@@ -22,7 +22,7 @@ ShowSpecGui(note, spec) {
     accessC := SpecRow(g, "Access", "DDL", ["read", "write"], spec["connector_access"], true)
     g.AddText("x+10 ys+3", "(write = allow changes in connected services)")
     infoC := g.AddText("xm w620", InfoLine(spec["topic"]))
-    warnC := g.AddText("xm w620 r3 cB00020", SpecWarning(spec["connectors"], spec["connector_access"], spec["continue"]))
+    warnC := g.AddText("xm w620 r3 cB00020", SpecWarning(spec["connectors"], spec["connector_access"], spec["continue"], spec["workspace"]))
     g.AddButton("xm w160 Default", DryRun ? "Log spec (dry run)" : "Send").OnEvent("Click", SendClicked)
     g.AddButton("x+10 w100", "Cancel").OnEvent("Click", CancelClicked)
     g.OnEvent("Close", CancelClicked)
@@ -33,6 +33,7 @@ ShowSpecGui(note, spec) {
     accessC.OnEvent("Change", WarningChanged)
     connC.OnEvent("Change", WarningChanged)
     contC.OnEvent("Change", WarningChanged)
+    wsC.OnEvent("Change", WarningChanged)
     g.Show()
 
     WarningChanged(*) {
@@ -41,7 +42,8 @@ ShowSpecGui(note, spec) {
             if (name := ConnectorName(c)) != ""
                 names.Push(name)
         cont := contC.Value ? ContinueModes[contC.Value] : Trim(contC.Text)
-        warnC.Value := SpecWarning(names, accessC.Text, cont)
+        ws := wsC.Value ? wsItems[wsC.Value] : Trim(wsC.Text)
+        warnC.Value := SpecWarning(names, accessC.Text, cont, ws)
     }
 
     KindChanged(*) {
@@ -61,8 +63,6 @@ ShowSpecGui(note, spec) {
         text := Trim(noteC.Value)
         if text = ""
             return Notify("The note is empty.", true)
-        if Trim(contC.Text) = "session"
-            return Notify("Type the session name in Continue as session:<name>, or pick another mode.", true)
         typedTopic := Trim(topicC.Text)
         s := Map("kind", kindC.Text, "model", modelC.Text, "workspace", Trim(wsC.Text), "notify", notifyC.Text
             , "topic", typedTopic, "topic_title", typedTopic = spec["topic"] ? spec["topic_title"] : "", "continue", contC.Text

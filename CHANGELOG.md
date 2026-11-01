@@ -8,7 +8,7 @@ While the version is 0.x, Claude-thingy is in alpha: config formats and folder l
 
 ### Added
 
-- Continue mode `session:<name>`. A project or clone job can start from one of your own Claude Code sessions (named with `/rename`) in a forked copy, so your session isn't changed. Say "pick up where I left off" or type the name in the popup.
+- Continue mode `session`. A project job can start from your latest Claude Code session in that project (or a specific one with `session:<name>`), in a forked copy, so your session isn't changed. Say "pick up where I left off". Claude-thingy lists only file names, dates and sizes in Claude Code's folder for that project, and skips its own sessions. The new `session_max_mb` setting caps how big a session it will load.
 
 ## [0.1.0] - 2026-10-31
 

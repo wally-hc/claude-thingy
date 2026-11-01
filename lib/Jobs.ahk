@@ -1,6 +1,15 @@
 StartJob(note, spec) {
-    if spec["continue"] = "session"
-        return Notify("To continue a session, put its name in Continue as session:<name>.", true)
+    latest := ""
+    if spec["continue"] = "session" {
+        p := RegExMatch(spec["workspace"], "^project:(.+)$", &pm) ? FindProject(pm[1]) : ""
+        if !p
+            return Notify("Continuing your latest session only works for a project.", true)
+        latest := LatestSession(p["path"])
+        if !IsObject(latest)
+            return Notify("There's no Claude Code session in " p["name"] " to continue.", true)
+        if latest.kb > Conf("session_max_mb", 2) * 1024
+            return Notify("Your latest session in " p["name"] " is " latest.kb " KB, over the session_max_mb limit. Pick another Continue mode or raise the limit.", true)
+    }
     list := []
     for name in spec["connectors"] {
         if SubStr(name, 1, 4) != "new:"
@@ -13,7 +22,7 @@ StartJob(note, spec) {
     id := FormatTime(, "yyyyMMdd-HHmmss")
     job := Map("id", id, "spec", spec, "note", note, "topic", topic, "round", 1, "status", "starting", "started", A_Now
         , "session", "", "question", "", "deadline", "", "last_input", note, "last_shown", note, "branch", "", "compare", "")
-    job["fork"] := RegExMatch(spec["continue"], "^session:(.+)$", &fm) ? fm[1] : ""
+    job["fork"] := IsObject(latest) ? latest.id : RegExMatch(spec["continue"], "^session:(.+)$", &fm) ? fm[1] : ""
     t := Topics[topic], sid := ""
     if spec["continue"] = "resume" && t.Get("session", "") != "" && DirExist(t.Get("folder", "")) && t.Get("workspace", "") = spec["workspace"] {
         cwd := t["folder"], sid := t["session"], job["branch"] := t.Get("branch", ""), job["compare"] := t.Get("compare", "")
@@ -206,6 +215,9 @@ LaunchClaude(job, text, sid := "") {
         from := " --resume " fork " --fork-session -n claude-thingy-" job["topic"] " --system-prompt-snapshot off"
     else
         from := ""
+    resumed := from != ""
+    if sid = ""
+        job["session"] := NewUuid(), from .= " --session-id " job["session"]
     cmd := '"' Cfg["claude"] '" -p' from
         . " --model " spec["model"] " --max-turns " spec["max_turns"] " --output-format json"
         . (chat ? ' --permission-mode dontAsk --tools "Read,Glob,Grep,WebSearch,WebFetch"' : " --permission-mode acceptEdits")
@@ -215,7 +227,7 @@ LaunchClaude(job, text, sid := "") {
         . ' < "' base '-prompt.txt" > "' base '-out.json" 2> "' base '-err.txt"'
     EnvSet("CLAUDE_CODE_SUBAGENT_MODEL", Conf("subagent_model", "haiku"))
     Run(A_ComSpec ' /s /c "' cmd '"', job["cwd"], "Hide", &pid)
-    job["pid"] := pid, job["base"] := base, job["status"] := "running", job["round_started"] := A_Now, job["resumed"] := from != ""
+    job["pid"] := pid, job["base"] := base, job["status"] := "running", job["round_started"] := A_Now, job["resumed"] := resumed
     SaveJobs(), RebuildJobsMenu()
 }
 
