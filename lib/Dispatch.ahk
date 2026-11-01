@@ -262,6 +262,9 @@ InfoLine(topic) {
     else {
         days := DaysAgo(Topics[topic].Get("last", ""))
         line := "Continuing: " Topics[topic]["title"] ", " (days >= 9999 ? "not run yet" : days " day" (days = 1 ? "" : "s") " ago")
+        for job in Jobs
+            if job["status"] = "waiting" && job["topic"] = topic
+                line := "Answers the waiting question in " Topics[topic]["title"] ": " SubStr(job["question"], 1, 80) " (with Continue set to resume or memory)"
     }
     return RouteError != "" ? line "   (" RouteError ")" : line
 }

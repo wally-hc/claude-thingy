@@ -18,6 +18,9 @@ StartJob(note, spec) {
             list.Push(SubStr(name, 5))
     }
     spec["connectors"] := list
+    for job in Jobs
+        if job["status"] = "waiting" && job["topic"] = spec["topic"] && InList(spec["continue"], ["resume", "memory"])
+            return AnswerJob(job, note)
     topic := EnsureTopic(spec)
     id := FormatTime(, "yyyyMMdd-HHmmss")
     job := Map("id", id, "spec", spec, "note", note, "topic", topic, "round", 1, "status", "starting", "started", A_Now
@@ -42,6 +45,7 @@ StartJob(note, spec) {
     if header != ""
         FileAppend(header, job["log"], "UTF-8")
     Jobs.Push(job)
+    CloseSupersededWaits()
     LaunchClaude(job, JobPrompt(job), sid)
     Notify("On it: " t["title"])
 }
@@ -343,6 +347,20 @@ LoadJobs() {
     try Jobs := JsonParse(FileRead(JobsPath, "UTF-8"))
     if !(Jobs is Array)
         Jobs := []
+    if CloseSupersededWaits()
+        SaveJobs()
+}
+
+CloseSupersededWaits() {
+    closed := 0
+    for older in Jobs
+        if older["status"] = "waiting"
+            for newer in Jobs
+                if newer["topic"] = older["topic"] && newer.Get("started", "") > older.Get("started", "") {
+                    older["status"] := "done", older["question"] := "", older["deadline"] := "", closed++
+                    break
+                }
+    return closed
 }
 
 SaveJobs() {

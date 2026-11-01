@@ -192,6 +192,7 @@ If a reply ends with a `QUESTION: …` line, the job becomes **waiting** and you
 
 - Click the notification, or the job under tray → **Jobs**. A small reply window opens without taking focus.
 - Record a voice note that starts with **"answer"**. It goes to the waiting job, and if several are waiting, a picker appears.
+- Or just reply in a normal note. If the popup puts it on the same topic with Continue set to `resume` or `memory`, it answers the waiting job too. The popup says "Answers the waiting question in …" when that will happen. If you start that topic fresh instead, the old question is closed, so it can't resume later on its own.
 - With `best-guess-after:<minutes>`, the job resumes on its own after that many minutes and states its assumptions.
 
 An answer resumes the same session (`--resume <id>`) from the same folder with the same settings.

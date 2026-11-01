@@ -6,6 +6,10 @@ While the version is 0.x, Claude-thingy is in alpha: config formats and folder l
 
 ## [Unreleased]
 
+### Fixed
+
+- A normal follow-up note on a topic with a waiting question started a new job and left the old one waiting, where it could later resume on its own. The note now answers the waiting job. Starting the topic fresh closes the old question, and stuck waiting jobs are closed on start-up.
+
 ### Added
 
 - A dashboard window (Home, Jobs, Topics, Settings) with live job counts, this month's cost, and buttons to open, answer or stop jobs. It opens from a desktop shortcut, the taskbar or a double-click on the tray icon, and reuses the running app instead of starting a second copy.
